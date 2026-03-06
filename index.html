@@ -649,6 +649,15 @@ function bindButtons(buttons) {
                             .replace(/\^/g, '**');
 
                         let res = Function('"use strict";return ' + exp)();
+
+                        // 新增：判断计算结果是否为无穷大（除以0的最终结果）
+                        if (res === Infinity || res === -Infinity) {
+                            value = "不能除以 0";
+                            d.value = value;
+                            saveToUndo();
+                            return;
+                        }
+
                         const result = formatResult(res);
                         saveToUndo();
                         value = result;
