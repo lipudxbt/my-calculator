@@ -368,8 +368,8 @@ body.vivo-device #history-btn {
 
 /* ========== 原有样式分割线（请勿删除） ========== */
 }
-/* 手机端专用：缩小数字 + 上移，不破坏动画，平板不生效 */
-@media only screen and (max-width: 767px) and (min-width: 320px) {
+/* 仅 VIVO 手机专用：缩小数字 + 上移，OPPO/其他手机不生效，平板不生效 */
+body.vivo-device {
   #result-display {
     font-size: 28px;
     margin-top: -12px;
