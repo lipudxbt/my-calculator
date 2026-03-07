@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover, shrink-to-fit=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<title>计算器（漓谱）v1.7.9 </title>
+<title>计算器（漓谱）v1.8.0 </title>
 <style>
 * {
     margin: 0;
@@ -59,7 +59,7 @@ body {
     border: none;
     background: transparent;
     text-align: right;
-    width: 50%;
+    width: 100%;
     outline: none;
     transition: all 0.3s ease;
 }
@@ -407,7 +407,7 @@ body.vivo-device #history-btn {
     <div class="button-grid" id="main-page">
         <button class="reset-btn">归零</button>
         <button>.</button>
-        <button>⌫</button>
+        <button id="backspace-btn-main">⌫</button>
         <button class="eq">=</button>
 
         <button>1</button>
@@ -434,7 +434,7 @@ body.vivo-device #history-btn {
     <div class="page-2" id="page-2">
         <button class="reset-btn">归零</button>
         <button>.</button>
-        <button>⌫</button>
+        <button id="backspace-btn-page2">⌫</button>
         <button class="eq">=</button>
 
         <button>1</button>
@@ -727,6 +727,14 @@ function backspace() {
         return;
     }
 
+    const isError = currentInput === "不能除以 0" || currentInput === "啥意思？" || currentInput === "计算超时";
+    if (isError) {
+        currentInput = '';
+        saveToUndo();
+        updateDisplays();
+        return;
+    }
+
     if (currentInput === '') return;
     const start = resultDisplay.selectionStart;
     const end = resultDisplay.selectionEnd;
@@ -745,6 +753,23 @@ function backspace() {
 }
 
 function insertText(text) {
+    // 👇👇👇 这里是最终修复：等号后出现错误，直接清空
+    if (isAfterEqual) {
+        const errorList = ["不能除以 0", "啥意思？", "计算超时"];
+        if (errorList.includes(lastResult)) {
+            currentInput = "";
+            lastResult = "";
+            isAfterEqual = false;
+            saveToUndo();
+        }
+    }
+
+    const isError = currentInput === "不能除以 0" || currentInput === "啥意思？" || currentInput === "计算超时";
+    if (isError) {
+        currentInput = '';
+        saveToUndo();
+    }
+
     const basicOpReg = /[+\-×÷]/;
     const otherOpReg = /[√^π%]/;
     const allOpReg = /[+\-×÷√^%]/;
@@ -795,11 +820,10 @@ function clearAll() {
 
 function calculate() {
     if (isAfterEqual) {
-    return;
-}
+        return;
+    }
     if (!currentInput) return;
 
-    // 只删末尾多余运算符 +-×÷√^，不删 %
     let cleanInput = currentInput.replace(/[+\-×÷√^]+$/, '');
     if (!cleanInput) return;
 
@@ -841,11 +865,9 @@ function calculate() {
         isAfterEqual = true;
         saveToUndo();
 
-        // 👇👇👇 触发等号动画
         exprDisplay.classList.add('animate-expr');
         resultDisplay.classList.add('animate-result');
 
-        // 动画结束后恢复样式
         setTimeout(() => {
             exprDisplay.classList.remove('animate-expr');
             resultDisplay.classList.remove('animate-result');
@@ -926,7 +948,6 @@ function bindButtons(buttons) {
             if (isError) {
                 currentInput = "";
                 saveToUndo();
-                return;
             }
 
             switch(t) {
@@ -988,6 +1009,10 @@ btnConfirm.onclick = () => {
 };
 
 resultDisplay.addEventListener('input', () => {
+    const isError = currentInput === "不能除以 0" || currentInput === "啥意思？" || currentInput === "计算超时";
+    if (isError) {
+        currentInput = '';
+    }
     currentInput = resultDisplay.value;
     saveToUndo();
     updateDisplays();
@@ -998,6 +1023,64 @@ window.onload = () => {
     updateHistoryDisplay();
     resultDisplay.focus();
 };
+// 长按退格键（⌫）快速连续删除功能
+let backspaceTimer = null;
+let isLongPress = false;
+
+// 连续退格的执行函数
+function startContinuousBackspace() {
+    backspace();
+    // 每 100 毫秒执行一次退格，可根据需要调整速度
+    backspaceTimer = setTimeout(startContinuousBackspace, 100);
+}
+
+// 给退格键绑定长按逻辑的通用函数
+function bindLongPressBackspace(btnId) {
+    const btn = document.getElementById(btnId);
+
+    // 移动端触摸事件
+    btn.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        isLongPress = false;
+        // 长按 300ms 后开始连续删除
+        setTimeout(() => {
+            isLongPress = true;
+            startContinuousBackspace();
+        }, 300);
+    });
+
+    btn.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        clearTimeout(backspaceTimer);
+        if (!isLongPress) {
+            backspace(); // 短按正常退格一次
+        }
+        isLongPress = false;
+    });
+
+    // 桌面端鼠标事件（兼容）
+    btn.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        isLongPress = false;
+        setTimeout(() => {
+            isLongPress = true;
+            startContinuousBackspace();
+        }, 300);
+    });
+
+    btn.addEventListener('mouseup', (e) => {
+        e.preventDefault();
+        clearTimeout(backspaceTimer);
+        if (!isLongPress) {
+            backspace();
+        }
+        isLongPress = false;
+    });
+}
+
+// 绑定两个退格键
+bindLongPressBackspace('backspace-btn-main');
+bindLongPressBackspace('backspace-btn-page2');
 </script>
 </body>
 </html>
