@@ -323,6 +323,39 @@ button.eq:active {
   padding: 4px 8px;
   margin: 0 -4px;
 }
+/* ========== VIVO 手机专属适配 ========== */
+body.vivo-device {
+    --top-num-font: 34px;
+    --bottom-num-font: 18px;
+    --btn-size: 45px;
+    --btn-font: 14px;
+}
+
+/* 顶部数字优化 */
+body.vivo-device #expr-display {
+    font-size: var(--bottom-num-font);
+    margin-bottom: 6px;
+}
+body.vivo-device #result-display {
+    font-size: var(--top-num-font);
+    line-height: 1.1;
+}
+
+/* 小按钮适配 */
+body.vivo-device #undo-btn,
+body.vivo-device #redo-btn,
+body.vivo-device #history-btn,
+body.vivo-device #toggle-btn {
+    width: var(--btn-size);
+    height: var(--btn-size);
+    font-size: var(--btn-font);
+}
+
+/* 历史记录文字更紧凑 */
+body.vivo-device #history-btn {
+    line-height: 1;
+}
+
 </style>
 </head>
 <body>
@@ -446,6 +479,11 @@ let calcMap = new Map();
 // ========== 手机禁输入法核心 ==========
 const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+// ========== VIVO 设备检测 ==========
+const isVivo = /vivo|VIVO/i.test(navigator.userAgent);
+if (isVivo) {
+    document.body.classList.add('vivo-device');
+}
 
 if (isMobile) resultDisplay.inputMode = "none";
 if (isIOS) {
