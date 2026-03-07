@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<title>计算机（漓谱）v1.6.9 </title>
+<meta name="apple-mobile-web-webcapable" content="yes">
+<title>计算器（漓谱）v1.7.9 </title>
 <style>
 * {
     margin: 0;
@@ -31,26 +31,71 @@ body {
     box-shadow:
         0 15px 25px rgba(0,0,0,0.15),
         0 5px 10px rgba(0,0,0,0.05),
-        inset 0 2px 0 rgba(255,255,0.9);
+        inset 0 2px 0 rgba(255,255,255,0.9);
 }
 
-#display {
+.display-wrapper {
     width: 100%;
-    height: 90px;
     background: #f8f8f8;
-    border: none;
-    border-radius: 16px;
-    font-size: 36px;
-    text-align: right;
-    padding: 0 16px;
-    outline: none;
-    caret-color: #FF9900;
+    border-radius: 8px;
+    padding: 4px 16px 12px;
     margin-bottom: 12px;
-    color: #000;
     box-shadow:
         inset 0 5px 10px rgba(0,0,0,0.15),
         inset 0 2px 5px rgba(0,0,0,0.1),
         0 1px 2px rgba(255,255,255,0.8);
+    text-align: right;
+    position: relative;
+    height: 90px;
+}
+
+#expr-display {
+    font-size: 20px;
+    color: #888;
+    min-height: 24px;
+    white-space: nowrap;
+    overflow: hidden;
+    border: none;
+    background: transparent;
+    text-align: right;
+    width: 100%;
+    outline: none;
+    transition: all 0.3s ease;
+}
+
+#result-display {
+    font-size: 36px;
+    color: #000;
+    font-weight: normal;
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    border: none;
+    background: transparent;
+    text-align: right;
+    width: 100%;
+    outline: none;
+    caret-color: #FF9900;
+    transition: all 0.3s ease;
+}
+
+/* 等号动画：表达式变小变灰，结果从灰变大 */
+#expr-display.animate-expr {
+    font-size: 16px;
+    color: #aaa;
+}
+
+#result-display.animate-result {
+    font-size: 20px;
+    color: #888;
+    animation: resultPop 0.3s forwards;
+}
+
+@keyframes resultPop {
+    to {
+        font-size: 36px;
+        color: #000;
+    }
 }
 
 #history-display {
@@ -79,14 +124,17 @@ body {
 #history-display::-webkit-scrollbar {
     width: 4px;
 }
+
 #history-display::-webkit-scrollbar-track {
     background: #f8f8f8;
     border-radius: 2px;
 }
+
 #history-display::-webkit-scrollbar-thumb {
     background: #ddd;
     border-radius: 2px;
 }
+
 #history-display::-webkit-scrollbar-thumb:active {
     background: #ccc;
 }
@@ -195,6 +243,7 @@ button.reset-btn {
         inset 0 2px 0 rgba(255,255,255,0.8);
     transform: translateY(-3px);
 }
+
 button.reset-btn:active {
     transform: translateY(0);
     box-shadow:
@@ -212,6 +261,7 @@ button.eq {
     transform: translateY(-3px);
     transition: transform 0.12s ease, box-shadow 0.12s ease;
 }
+
 button.eq:active {
     transform: translateY(0);
     box-shadow:
@@ -262,9 +312,16 @@ button.eq:active {
 }
 
 .history-row {
-    cursor: pointer;
-    padding: 4px 0;
-    user-select: none;
+  cursor: pointer;
+  padding: 4px 0;
+  user-select: none;
+}
+
+.history-row:active {
+  background: #ffe0b2;
+  border-radius: 6px;
+  padding: 4px 8px;
+  margin: 0 -4px;
 }
 </style>
 </head>
@@ -281,7 +338,10 @@ button.eq:active {
 </div>
 
 <div class="calculator">
-    <input type="text" id="display" value="">
+    <div class="display-wrapper">
+        <input type="text" id="expr-display" readonly>
+        <input type="text" id="result-display">
+    </div>
 
     <div class="extra-row">
         <button id="trash-btn">🗑️</button>
@@ -353,7 +413,8 @@ button.eq:active {
 </div>
 
 <script>
-const d = document.getElementById('display');
+const exprDisplay = document.getElementById('expr-display');
+const resultDisplay = document.getElementById('result-display');
 const historyDisplay = document.getElementById('history-display');
 const mainButtons = document.querySelectorAll('#main-page button');
 const page2Buttons = document.querySelectorAll('#page-2 button');
@@ -369,7 +430,10 @@ const overlay = document.getElementById('overlay');
 const btnCancel = document.querySelector('.btn-cancel');
 const btnConfirm = document.querySelector('.btn-confirm');
 
-let value = '';
+let currentInput = '';
+let lastResult = '';
+let isAfterEqual = false;
+
 let currentPage = 'main';
 let prevPage = 'main';
 let historyRecords = JSON.parse(localStorage.getItem('calcHistory')) || [];
@@ -379,13 +443,14 @@ let redoStack = [];
 const MAX_UNDO_STEPS = 30;
 let calcMap = new Map();
 
+// ========== 手机禁输入法核心 ==========
 const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
 
-if (isMobile) d.inputMode = "none";
+if (isMobile) resultDisplay.inputMode = "none";
 if (isIOS) {
-    d.addEventListener('click', () => d.focus());
-    d.addEventListener('blur', () => setTimeout(() => d.focus(), 10));
+    resultDisplay.addEventListener('click', () => resultDisplay.focus());
+    resultDisplay.addEventListener('blur', () => setTimeout(() => resultDisplay.focus(), 10));
 }
 
 function updateHistoryDisplay() {
@@ -405,8 +470,8 @@ function saveHistoryToLocal() {
 }
 
 function saveToUndo() {
-    if (value !== undoStack[undoStack.length - 1]) {
-        undoStack.push(value);
+    if (currentInput !== undoStack[undoStack.length - 1]) {
+        undoStack.push(currentInput);
         redoStack = [];
         if (undoStack.length > MAX_UNDO_STEPS) {
             undoStack.shift();
@@ -417,8 +482,9 @@ function saveToUndo() {
 function undo() {
     if (undoStack.length <= 1) return;
     redoStack.push(undoStack.pop());
-    value = undoStack[undoStack.length - 1];
-    d.value = value;
+    currentInput = undoStack[undoStack.length - 1];
+    isAfterEqual = false;
+    updateDisplays();
 }
 
 function redo() {
@@ -428,56 +494,52 @@ function redo() {
     if (undoStack.length > MAX_UNDO_STEPS) {
         undoStack.shift();
     }
-    value = restoreVal;
-    d.value = value;
+    currentInput = restoreVal;
+    isAfterEqual = false;
+    updateDisplays();
 }
 
 function copyHistoryResult(el) {
     const lineText = el.textContent.trim();
     const parts = lineText.split('=');
     if (parts.length < 2) return;
-    const targetResult = parts[1].trim();
+    const targetResult = parts[parts.length - 1].trim();
 
-    const currentContent = d.value;
-    const pos = d.selectionStart;
+    if (isAfterEqual) {
+        currentInput = targetResult;
+        lastResult = targetResult;
+        isAfterEqual = false;
+        updateDisplays();
+        saveToUndo();
+        resultDisplay.focus();
+        resultDisplay.setSelectionRange(currentInput.length, currentInput.length);
+        return;
+    }
+
+    const s = currentInput;
     const opReg = /[+\-×÷√^%]/;
 
-    const prevChar = pos > 0 ? currentContent[pos - 1] : '';
-    const nextChar = pos < currentContent.length ? currentContent[pos] : '';
-
-    let newVal = '';
-    if (opReg.test(prevChar) && opReg.test(nextChar)) {
-        newVal = currentContent.substring(0, pos) + targetResult + currentContent.substring(pos);
-    } else if (!opReg.test(prevChar) && opReg.test(nextChar) && prevChar !== '') {
-        let left = pos - 1;
-        while (left >= 0 && !opReg.test(currentContent[left])) {
-            left--;
-        }
-        const prefix = currentContent.substring(0, left + 1);
-        const suffix = currentContent.substring(pos);
-        newVal = prefix + targetResult + suffix;
-    } else if (currentContent === '') {
-        newVal = targetResult;
-    } else {
-        const lastChar = currentContent.slice(-1);
-        if (opReg.test(lastChar)) {
-            newVal = currentContent + targetResult;
-        } else {
-            let lastOpIndex = -1;
-            for (let i = currentContent.length - 1; i >= 0; i--) {
-                if (opReg.test(currentContent[i])) {
-                    lastOpIndex = i;
-                    break;
-                }
-            }
-            newVal = lastOpIndex === -1 ? targetResult : currentContent.substring(0, lastOpIndex + 1) + targetResult;
+    let lastOpPos = -1;
+    for (let i = s.length - 1; i >= 0; i--) {
+        if (opReg.test(s[i])) {
+            lastOpPos = i;
+            break;
         }
     }
-    value = newVal;
-    d.value = value;
-    d.focus();
-    d.setSelectionRange(value.length, value.length);
+
+    let newInput;
+    if (lastOpPos === -1) {
+        newInput = targetResult;
+    } else {
+        newInput = s.substring(0, lastOpPos + 1) + targetResult;
+    }
+
+    currentInput = newInput;
+    isAfterEqual = false;
+    updateDisplays();
     saveToUndo();
+    resultDisplay.focus();
+    resultDisplay.setSelectionRange(currentInput.length, currentInput.length);
 }
 
 function addHistoryRecord(expression, result) {
@@ -499,21 +561,250 @@ function addHistoryRecord(expression, result) {
 }
 
 function formatResult(num) {
-    if (!isFinite(num)) {
-        return "计算超时";
-    }
-    if (isNaN(num)) {
-        return "啥意思？";
-    }
+    if (!isFinite(num)) return "计算超时";
+    if (isNaN(num)) return "啥意思？";
     return String(Number(num.toPrecision(12)));
 }
 
 function cleanExpression(expr) {
     expr = expr.replace(/(^|\+|\-|\×|÷|\()0+([1-9])/g, '$1$2');
     expr = expr.replace(/(^|\+|\-|\×|÷|\()0+/g, '$10');
-    expr = expr.replace(/√([\d\.]+)/g, 'Math.sqrt($1)');
-    expr = expr.replace(/(\d)(π|√)/g, '$1*$2');
+
+    expr = expr.replace(/π(\d)/g, 'π*$1');
+    expr = expr.replace(/(\d)π/g, '$1*π');
+    expr = expr.replace(/π+/g, match => 'π*'.repeat(match.length).slice(0, -1));
+
+    expr = expr.replace(/\^ *1 *\/ *0/g, '^999');
+
+    // 百分号处理
+    expr = expr.replace(/(\d+(?:\.\d+)?)%/g, '($1/100)');
+
+    let sqrtRegex = /(√+)(\d+(?:\.\d+)?)/g;
+    let match;
+    while ((match = sqrtRegex.exec(expr)) !== null) {
+        const roots = match[1];
+        const num = match[2];
+        let sqrtStr = num;
+        for (let i = 0; i < roots.length; i++) {
+            sqrtStr = `Math.sqrt(${sqrtStr})`;
+        }
+        expr = expr.replace(match[0], sqrtStr);
+        sqrtRegex.lastIndex = 0;
+    }
+
+    let numSqrtRegex = /(\d+(?:\.\d+)?)Math.sqrt/g;
+    while ((match = numSqrtRegex.exec(expr)) !== null) {
+        expr = expr.replace(match[0], `${match[1]}*Math.sqrt`);
+        numSqrtRegex.lastIndex = 0;
+    }
+
+    // 处理连续负号
+    expr = expr.replace(/(^|[+\-×÷\(])\++/g, '$1');
+    expr = expr.replace(/(^|[+\-×÷\(])\-{2,}/g, '$1');
+    expr = expr.replace(/(^|[+\-×÷\(])\-/g, function(m, p) {
+        return p === '' ? '-' : p + '-';
+    });
+
+    expr = expr.replace(/π/g, 'Math.PI');
     return expr;
+}
+
+function getPreviewResult() {
+    try {
+        if (!currentInput || !/[+\-×÷√^%]/.test(currentInput)) return '';
+
+        let tempInput = currentInput;
+        tempInput = cleanExpression(tempInput);
+        tempInput = tempInput.replace(/[+\-×÷^*/]+$/, '');
+        if (!tempInput) return '';
+
+        let exp = tempInput;
+        if (/\/0(?!\d)/.test(exp)) return "不能除以 0";
+
+        const powerMatch = exp.match(/\*\*(\d+)/g);
+        if (powerMatch) {
+            for (let pTerm of powerMatch) {
+                const p = parseInt(pTerm.replace(/\*\*/g, ''));
+                if (p > 999) return "计算超时";
+            }
+        }
+
+        exp = exp.replace(/×/g, '*').replace(/÷/g, '/').replace(/\^/g, '**');
+        let res = Function('"use strict";return ' + exp)();
+
+        if (res === Infinity || res === -Infinity) return "不能除以 0";
+        if (isNaN(res)) return "啥意思？";
+        if (!isFinite(res)) return "计算超时";
+        return formatResult(res);
+    } catch (e) {
+        return "";
+    }
+}
+
+function updateDisplays() {
+    const preview = getPreviewResult();
+
+    if (isAfterEqual) {
+        exprDisplay.value = lastResult || '';
+        exprDisplay.style.fontSize = '36px';
+        exprDisplay.style.color = '#000';
+        resultDisplay.value = currentInput || '';
+        resultDisplay.style.fontSize = '20px';
+        resultDisplay.style.color = '#888';
+    } else {
+        exprDisplay.value = preview || '';
+        exprDisplay.style.fontSize = '20px';
+        exprDisplay.style.color = '#888';
+        resultDisplay.value = currentInput || '';
+        resultDisplay.style.fontSize = '36px';
+        resultDisplay.style.color = '#000';
+    }
+}
+
+function backspace() {
+    if (isAfterEqual) {
+        currentInput = '';
+        lastResult = '';
+        isAfterEqual = false;
+        saveToUndo();
+        updateDisplays();
+        return;
+    }
+
+    if (currentInput === '') return;
+    const start = resultDisplay.selectionStart;
+    const end = resultDisplay.selectionEnd;
+
+    if (start === end) {
+        currentInput = currentInput.substring(0, start - 1) + currentInput.substring(end);
+    } else {
+        currentInput = currentInput.substring(0, start) + currentInput.substring(end);
+    }
+
+    saveToUndo();
+    updateDisplays();
+
+    resultDisplay.focus();
+    resultDisplay.setSelectionRange(start > 0 ? start - 1 : 0, start > 0 ? start - 1 : 0);
+}
+
+function insertText(text) {
+    const basicOpReg = /[+\-×÷]/;
+    const otherOpReg = /[√^π%]/;
+    const allOpReg = /[+\-×÷√^%]/;
+
+    if (isAfterEqual) {
+        if (allOpReg.test(text)) {
+            currentInput = lastResult + text;
+        } else {
+            currentInput = text;
+        }
+        isAfterEqual = false;
+        saveToUndo();
+        updateDisplays();
+        resultDisplay.focus();
+        resultDisplay.setSelectionRange(currentInput.length, currentInput.length);
+        return;
+    }
+
+    const start = resultDisplay.selectionStart;
+    const end = resultDisplay.selectionEnd;
+    const before = currentInput.substring(0, start);
+    const after = currentInput.substring(end);
+
+    let newText = text;
+    if (basicOpReg.test(text) && start === end && before.length > 0) {
+        const lastChar = before.slice(-1);
+        if (lastChar === text) {
+            newText = '';
+        }
+    }
+
+    currentInput = before + newText + after;
+    saveToUndo();
+    updateDisplays();
+
+    const newPos = start + newText.length;
+    resultDisplay.focus();
+    resultDisplay.setSelectionRange(newPos, newPos);
+}
+
+function clearAll() {
+    currentInput = '';
+    lastResult = '';
+    isAfterEqual = false;
+    saveToUndo();
+    updateDisplays();
+}
+
+function calculate() {
+    if (isAfterEqual) {
+    return;
+}
+    if (!currentInput) return;
+
+    // 只删末尾多余运算符 +-×÷√^，不删 %
+    let cleanInput = currentInput.replace(/[+\-×÷√^]+$/, '');
+    if (!cleanInput) return;
+
+    try {
+        const originalExpr = currentInput;
+        let exp = cleanExpression(cleanInput);
+
+        const powerMatch = exp.match(/\*\*(\d+)/g);
+        if (powerMatch) {
+            for (let pTerm of powerMatch) {
+                const p = parseInt(pTerm.replace(/\*\*/g, ''));
+                if (p > 999) {
+                    lastResult = "计算超时";
+                    isAfterEqual = true;
+                    updateDisplays();
+                    saveToUndo();
+                    return;
+                }
+            }
+        }
+
+        if (/\/0(?!\d)/.test(exp)) {
+            lastResult = "不能除以 0";
+        } else {
+            exp = exp.replace(/×/g, '*').replace(/÷/g, '/').replace(/\^/g, '**');
+            let res = Function('"use strict";return ' + exp)();
+
+            if (res === Infinity || res === -Infinity) {
+                lastResult = "不能除以 0";
+            } else if (!isFinite(res)) {
+                lastResult = "计算超时";
+            } else if (isNaN(res)) {
+                lastResult = "啥意思？";
+            } else {
+                lastResult = formatResult(res);
+            }
+        }
+
+        isAfterEqual = true;
+        saveToUndo();
+
+        // 👇👇👇 触发等号动画
+        exprDisplay.classList.add('animate-expr');
+        resultDisplay.classList.add('animate-result');
+
+        // 动画结束后恢复样式
+        setTimeout(() => {
+            exprDisplay.classList.remove('animate-expr');
+            resultDisplay.classList.remove('animate-result');
+            updateDisplays();
+        }, 300);
+
+        if (!["不能除以 0", "啥意思？", "计算超时"].includes(lastResult)) {
+            addHistoryRecord(originalExpr, lastResult);
+        }
+    } catch (e) {
+        lastResult = "啥意思？";
+        isAfterEqual = true;
+        updateDisplays();
+        saveToUndo();
+    }
 }
 
 function switchPage() {
@@ -561,118 +852,32 @@ function switchHistoryPage() {
     }
 }
 
-function insertAtCursor(text) {
-    const start = d.selectionStart;
-    const end = d.selectionEnd;
-    const before = d.value.substring(0, start);
-    const after = d.value.substring(end);
-    value = before + text + after;
-    d.value = value;
-    d.selectionStart = d.selectionEnd = start + text.length;
-    saveToUndo();
-}
-
-function deleteAtCursor() {
-    if (value === '') return;
-    const start = d.selectionStart;
-    const end = d.selectionEnd;
-    if (start === end) {
-        value = value.substring(0, start - 1) + value.substring(end);
-    } else {
-        value = value.substring(0, start) + value.substring(end);
-    }
-    d.value = value;
-    d.selectionStart = d.selectionEnd = start > 0 ? start - 1 : 0;
-    saveToUndo();
-}
-
 function bindButtons(buttons) {
     buttons.forEach(btn => {
         btn.onmousedown = e => e.preventDefault();
         btn.onclick = () => {
             const t = btn.textContent.trim();
 
-            const isError = value === "不能除以 0" || value === "啥意思？" || value === "计算超时";
+            const isError = currentInput === "不能除以 0" || currentInput === "啥意思？" || currentInput === "计算超时";
             if (t === "=") {
-                if (value.trim() === "" || isError) {
-                    value = "";
-                    d.value = "";
+                if (currentInput.trim() === "" || isError) {
+                    currentInput = "";
+                    updateDisplays();
                     return;
                 }
             }
 
             if (isError) {
-                value = "";
-                d.value = "";
+                currentInput = "";
                 saveToUndo();
                 return;
             }
 
             switch(t) {
-                case "归零":
-                    value = "";
-                    d.value = "";
-                    saveToUndo();
-                    break;
-                case "⌫":
-                    deleteAtCursor();
-                    break;
-                case "=":
-                    try {
-                        const originalExpr = value;
-                        let exp = cleanExpression(value);
-
-                        if (/\/0(?!\d)/.test(exp)) {
-                            value = "不能除以 0";
-                            d.value = value;
-                            saveToUndo();
-                            return;
-                        }
-
-                        const powerMatch = exp.match(/\^(\d+)/);
-                        if (powerMatch) {
-                            const p = parseInt(powerMatch[1]);
-                            if (p > 999) {
-                                value = "计算超时";
-                                d.value = value;
-                                saveToUndo();
-                                return;
-                            }
-                        }
-
-                        exp = exp
-                            .replace(/×/g, '*')
-                            .replace(/÷/g, '/')
-                            .replace(/%/g, '/100')
-                            .replace(/√/g, 'Math.sqrt')
-                            .replace(/π/g, 'Math.PI')
-                            .replace(/\^/g, '**');
-
-                        let res = Function('"use strict";return ' + exp)();
-
-                        // 新增：判断计算结果是否为无穷大（除以0的最终结果）
-                        if (res === Infinity || res === -Infinity) {
-                            value = "不能除以 0";
-                            d.value = value;
-                            saveToUndo();
-                            return;
-                        }
-
-                        const result = formatResult(res);
-                        saveToUndo();
-                        value = result;
-                        d.value = value;
-                        if (result !== "不能除以 0" && result !== "啥意思？" && result !== "计算超时") {
-                            addHistoryRecord(originalExpr, result);
-                        }
-                    } catch (e) {
-                        value = "啥意思？";
-                        d.value = value;
-                        saveToUndo();
-                    }
-                    break;
-                default:
-                    insertAtCursor(t);
+                case "归零": clearAll(); break;
+                case "⌫": backspace(); break;
+                case "=": calculate(); break;
+                default: insertText(t); break;
             }
         };
     });
@@ -726,15 +931,16 @@ btnConfirm.onclick = () => {
     }
 };
 
-d.addEventListener('input', () => {
-    value = d.value;
+resultDisplay.addEventListener('input', () => {
+    currentInput = resultDisplay.value;
     saveToUndo();
+    updateDisplays();
 });
 
 window.onload = () => {
-    d.value = value;
-    d.focus();
+    updateDisplays();
     updateHistoryDisplay();
+    resultDisplay.focus();
 };
 </script>
 </body>
